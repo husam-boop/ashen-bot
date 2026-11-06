@@ -1,10 +1,28 @@
 import os
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = 7800718555
 USERS_SET = set()
+
+# --- Keep Alive for Render Free Web Service ---
+class KeepAliveHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ASHENREALM V2 IS ONLINE!")
+    def log_message(self, format, *args):
+        return
+
+def start_keep_alive():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), KeepAliveHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    print(f"Keep-Alive server running on port {port}")
+# ---------------------------------------------
 
 def main_menu():
     keyboard = [
@@ -126,6 +144,7 @@ def run():
     if not TOKEN:
         print("ERROR: BOT_TOKEN is missing!")
         return
+    start_keep_alive()
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler('admin', admin_cmd))
