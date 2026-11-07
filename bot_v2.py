@@ -1,10 +1,12 @@
 import os
 import threading
+import requests
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 TOKEN = os.getenv("BOT_TOKEN")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 OWNER_ID = 7800718555
 USERS_SET = set()
 
@@ -27,6 +29,35 @@ def start_keep_alive():
     print(f"Keep-Alive server running on port {port}")
 # ---------------------------------------------
 
+# --- Groq AI Function ---
+def ask_groq(user_message):
+    if not GROQ_API_KEY:
+        return "❌ مفتاح Groq مازال ما تحطش في Render. روح لـ Environment و زيد GROQ_API_KEY."
+    try:
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": "llama-3.1-8b-instant",
+            "messages": [
+                {"role": "system", "content": "انت مساعد ذكي اسمو ASHENREALM. جاوب بالدارجة الجزائرية البسيطة، و كن مفيد و مختصر. اذا سقساوك تكتب كود، اكتبو و اشرحو ببساطة."},
+                {"role": "user", "content": user_message}
+            ],
+            "temperature": 0.7,
+            "max_tokens": 1000
+        }
+        r = requests.post(url, headers=headers, json=data, timeout=30)
+        result = r.json()
+        if "choices" in result:
+            return result["choices"][0]["message"]["content"]
+        else:
+            return f"❌ خطأ من Groq: {result}"
+    except Exception as e:
+        return f"❌ صرا مشكل: {e}"
+# ---------------------------------------------
+
 def main_menu():
     keyboard = [
         [InlineKeyboardButton("🤖 AI Assistant", callback_data="ai")],
@@ -42,6 +73,8 @@ def main_menu():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user:
         USERS_SET.add(update.effective_user.id)
+    context.user_data['waiting_ai'] = False
+    context.user_data['waiting_contact'] = False
     await update.message.reply_text(
         "🐉 Welcome to ASHENREALM!\n\nYour personal AI and Technology Platform.\n\nChoose your destination:",
         reply_markup=main_menu()
@@ -53,8 +86,20 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
     except Exception:
         pass
+    if query.data == "home":
+        context.user_data['waiting_ai'] = False
+        await query.edit_message_text("🐉 ASHENREALM\n\nChoose your destination:", reply_markup=main_menu())
+        return
+    if query.data == "ai":
+        context.user_data['waiting_ai'] = True
+        context.user_data['waiting_contact'] = False
+        keyboard = [[InlineKeyboardButton("⬅️ Back to Main Menu", callback_data="home")]]
+        await query.edit_message_text(
+            "🤖 AI ASSISTANT\n\nراني واجد! اكتب سؤالك ضرك، و نجاوبك.\n\nمثال: كيفاش نتعلم بايثون؟",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
     sections = {
-        "ai": "🤖 AI ASSISTANT\n\nAI system coming soon.",
         "security": "🛡️ CYBERSECURITY\n\nSecurity tools coming soon.",
         "osint": "🔍 OSINT\n\nInformation analysis coming soon.",
         "automation": "⚙️ AUTOMATION\n\nAutomation tools coming soon.",
@@ -62,12 +107,9 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "owner": "👑 OWNER PANEL\n\nAdministration system coming soon.",
         "settings": "⚙️ SETTINGS\n\nSettings coming soon."
     }
-    if query.data == "home":
-        await query.edit_message_text("🐉 ASHENREALM\n\nChoose your destination:", reply_markup=main_menu())
-    else:
-        text = sections.get(query.data, "Unknown section.")
-        keyboard = [[InlineKeyboardButton("⬅️ Back to Main Menu", callback_data="home")]]
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    text = sections.get(query.data, "Unknown section.")
+    keyboard = [[InlineKeyboardButton("⬅️ Back to Main Menu", callback_data="home")]]
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def admin_cmd(update, context):
     if update.effective_user.id != OWNER_ID:
@@ -99,6 +141,7 @@ async def admin_button(update, context):
 
 async def contact_cmd(update, context):
     context.user_data['waiting_contact'] = True
+    context.user_data['waiting_ai'] = False
     await update.message.reply_text("📩 تواصل مع المطور\n\nاكتب رسالتك ضرك، و المطور راح يقراها.")
 
 async def handle_contact_message(update, context):
@@ -111,6 +154,14 @@ async def handle_contact_message(update, context):
         msg = f"📩 رسالة جديدة\n\n👤 الاسم: {u.first_name}\n🆔 ID: {u.id}\n👤 يوزر: @{u.username if u.username else 'ماكاش'}\n\n💬 الرسالة:\n{update.message.text}\n\nللرد اكتب:\n/reply {u.id} رسالتك"
         await context.bot.send_message(chat_id=OWNER_ID, text=msg)
         await update.message.reply_text("✅ رسالتك وصلت للمطور.")
+
+async def handle_ai_message(update, context):
+    if not context.user_data.get('waiting_ai'):
+        return
+    await update.message.reply_text("⏳ راني نخمم...")
+    answer = ask_groq(update.message.text)
+    keyboard = [[InlineKeyboardButton("⬅️ Back to Main Menu", callback_data="home")]]
+    await update.message.reply_text(answer, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def reply_cmd(update, context):
     if update.effective_user.id != OWNER_ID:
@@ -157,6 +208,7 @@ def run():
     app.add_handler(CommandHandler('reply', reply_cmd))
     app.add_handler(CallbackQueryHandler(admin_button, pattern="^admin_"))
     app.add_handler(CallbackQueryHandler(buttons, pattern="^(ai|security|osint|automation|developer|owner|settings|home)$"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ai_message))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_contact_message))
     print("ASHENREALM V2 IS ONLINE!")
     app.run_polling()
