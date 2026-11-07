@@ -29,33 +29,49 @@ def start_keep_alive():
     print(f"Keep-Alive server running on port {port}")
 # ---------------------------------------------
 
-# --- Groq AI Function ---
+# --- Groq AI Function - V3 مع حماية ---
 def ask_groq(user_message):
     if not GROQ_API_KEY:
         return "❌ مفتاح Groq مازال ما تحطش في Render. روح لـ Environment و زيد GROQ_API_KEY."
-    try:
-        url = "https://api.groq.com/openai/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "model": "llama-3.1-8b-instant",
-            "messages": [
-                {"role": "system", "content": "انت مساعد ذكي اسمو ASHENREALM. جاوب بالدارجة الجزائرية البسيطة، و كن مفيد و مختصر. اذا سقساوك تكتب كود، اكتبو و اشرحو ببساطة."},
-                {"role": "user", "content": user_message}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 1000
-        }
-        r = requests.post(url, headers=headers, json=data, timeout=30)
-        result = r.json()
-        if "choices" in result:
-            return result["choices"][0]["message"]["content"]
-        else:
-            return f"❌ خطأ من Groq: {result}"
-    except Exception as e:
-        return f"❌ صرا مشكل: {e}"
+    
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    # قائمة الموديلات - اذا واحد ما خدمش يجرب اللي بعدو
+    # هذا هو الدرس اللي تعلمناه: ما نعتمدوش على موديل واحد
+    models = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-70b-versatile",
+        "mixtral-8x7b-32768",
+        "gemma2-9b-it"
+    ]
+    
+    last_error = ""
+    for model in models:
+        try:
+            data = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "انت مساعد ذكي اسمو ASHENREALM. جاوب بالدارجة الجزائرية البسيطة، و كن مفيد و مختصر. اذا سقساوك تكتب كود، اكتبو و اشرحو ببساطة."},
+                    {"role": "user", "content": user_message}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 1000
+            }
+            r = requests.post(url, headers=headers, json=data, timeout=30)
+            result = r.json()
+            if "choices" in result:
+                return result["choices"][0]["message"]["content"]
+            else:
+                last_error = str(result)
+                continue
+        except Exception as e:
+            last_error = str(e)
+            continue
+    
+    return f"❌ صرا مشكل في كل الموديلات: {last_error}"
 # ---------------------------------------------
 
 def main_menu():
