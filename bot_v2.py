@@ -29,7 +29,7 @@ def start_keep_alive():
     print(f"Keep-Alive server running on port {port}")
 # ---------------------------------------------
 
-# --- Groq AI Function - V3 مع حماية ---
+# --- Groq AI Function - V4 الموديلات الجدد 2026 ---
 def ask_groq(user_message):
     if not GROQ_API_KEY:
         return "❌ مفتاح Groq مازال ما تحطش في Render. روح لـ Environment و زيد GROQ_API_KEY."
@@ -39,13 +39,12 @@ def ask_groq(user_message):
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
-    # قائمة الموديلات - اذا واحد ما خدمش يجرب اللي بعدو
-    # هذا هو الدرس اللي تعلمناه: ما نعتمدوش على موديل واحد
+    # الموديلات الجدد اللي يخدمو مجانا في Groq 2026
+    # الاول هو الذكي تاع البرمجة، الثاني هو السريع
     models = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-70b-versatile",
-        "mixtral-8x7b-32768",
-        "gemma2-9b-it"
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "qwen/qwen3.8-27b"
     ]
     
     last_error = ""
@@ -54,13 +53,13 @@ def ask_groq(user_message):
             data = {
                 "model": model,
                 "messages": [
-                    {"role": "system", "content": "انت مساعد ذكي اسمو ASHENREALM. جاوب بالدارجة الجزائرية البسيطة، و كن مفيد و مختصر. اذا سقساوك تكتب كود، اكتبو و اشرحو ببساطة."},
+                    {"role": "system", "content": "انت مساعد ذكي اسمو ASHENREALM. جاوب بالدارجة الجزائرية البسيطة، و كن مفيد و مختصر. اذا سقساوك تكتب كود، اكتبو كامل و اشرحو ببساطة خطوة بخطوة. انت خبير في البرمجة و الذكاء الاصطناعي."},
                     {"role": "user", "content": user_message}
                 ],
                 "temperature": 0.7,
-                "max_tokens": 1000
+                "max_tokens": 1500
             }
-            r = requests.post(url, headers=headers, json=data, timeout=30)
+            r = requests.post(url, headers=headers, json=data, timeout=60)
             result = r.json()
             if "choices" in result:
                 return result["choices"][0]["message"]["content"]
